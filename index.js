@@ -6,12 +6,14 @@ var xl = require('excel4node');
 
 var vote = {
   "1234567890": {
-    "question" : "",
-    "author" : "",
+    "question": "",
+    "author": "",
     "channel": "channelId",
     "no": [],
     "yes": [],
-    "total": 0
+    "total": 0,
+    "end": false,
+    "max" : 0,
   }
 }
 
@@ -70,12 +72,12 @@ client.on('interactionCreate', async interaction => {
                 .setLabel('NON')
                 .setStyle('PRIMARY')
             );
-          
+
           if (interaction.options.getBoolean("voteblanc")) row.addComponents(
             new MessageButton()
-                .setCustomId('vBlc' + msg.id)
-                .setLabel('BLANC')
-                .setStyle('SECONDARY')
+              .setCustomId('vBlc' + msg.id)
+              .setLabel('BLANC')
+              .setStyle('SECONDARY')
           )
 
           const end = new MessageActionRow()
@@ -86,20 +88,27 @@ client.on('interactionCreate', async interaction => {
                 .setStyle('DANGER'),
             );
 
+          var maxVote = -1
+          if (interaction.options.getInteger("maxvote") != undefined) maxVote = interaction.options.getInteger("maxvote")
+          console.log(maxVote)
+
           //CREATION DU JSON
           vote[msg.id] = {
-            "question" : question,
-            "author" : interaction.user.id,
+            "question": question,
+            "author": interaction.user.id,
             "channel": msg.channel.id,
             "no": [],
             "yes": [],
-            "total": 0
+            "vBlc" : [],
+            "total": 0,
+            "end": false,
+            "max" : maxVote
           }
 
           //ENVOI DES BOUTONS
           msg.edit({ components: [row] })
-          interaction.reply({ephemeral : true, content : "Votre message a bien été envoyé"})
-          interaction.user.send({content : "Ton sondage [" + question + "] a bien été crée, tu peux l'arreter a tout moment avec ce bouton", components : [end]})
+          interaction.reply({ ephemeral: true, content: "Votre commande a bien été envoyée" })
+          interaction.user.send({ content: "Ton sondage [" + question + "] a bien été crée, tu peux l'arreter a tout moment avec ce bouton", components: [end] })
         })
     }
   }
@@ -113,39 +122,56 @@ client.on('interactionCreate', async interaction => {
 
       if (buttonId === ("yAns" + voteId)) { //Le bouton cliclé est OUI
 
+        if (vote[voteId]["end"]) return;
+
         const length = vote[voteId]["no"].length
         vote[voteId]["yes"] = vote[voteId]["yes"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU OUI
         vote[voteId]["no"] = vote[voteId]["no"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU NON
+        vote[voteId]["vBlc"] = vote[voteId]["vBlc"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU VOTE BLANC
         vote[voteId]["yes"].push(interaction.user.id) //ON AJOUTE DANS LE YES
-        if (vote[voteId]["no"].length == length) vote[voteId]["total"] += 1 //Si aucun changement de vote on ajoute 1
+        vote[voteId]["total"] =  vote[voteId]["yes"].length + vote[voteId]["no"].length + vote[voteId]["vBlc"].length
+        if (vote[voteId]["max"] > 0 && vote[voteId]["total"] >= vote[voteId]["max"]) vote[voteId]["end"] = true;
 
       } else if (buttonId === ("nAns" + voteId)) { //Le bouton cliqué est NON
 
+        if (vote[voteId]["end"]) return;
+
         const length = vote[voteId]["yes"].length
         vote[voteId]["yes"] = vote[voteId]["yes"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU OUI
         vote[voteId]["no"] = vote[voteId]["no"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU NON
+        vote[voteId]["vBlc"] = vote[voteId]["vBlc"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU VOTE BLANC
         vote[voteId]["no"].push(interaction.user.id) //ON AJOUTE DANS LE NON
-        if (vote[voteId]["yes"].length == length) vote[voteId]["total"] += 1 //Si aucun changement de vote on ajoute 1
+        vote[voteId]["total"] =  vote[voteId]["yes"].length + vote[voteId]["no"].length + vote[voteId]["vBlc"].length
+        if (vote[voteId]["max"] > 0 && vote[voteId]["total"] >= vote[voteId]["max"]) vote[voteId]["end"] = true;
 
-      } else if (buttonId === ("vBlc" + voteId)){ //Le bouton cliqué est VOTE BLANC
+      } else if (buttonId === ("vBlc" + voteId)) { //Le bouton cliqué est VOTE BLANC
+
+        if (vote[voteId]["end"]) return;
 
         const length = vote[voteId]["yes"].length
         vote[voteId]["yes"] = vote[voteId]["yes"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU OUI
         vote[voteId]["no"] = vote[voteId]["no"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU NON
-        if (vote[voteId]["yes"].length == length) vote[voteId]["total"] += 1 //Si aucun changement de vote on ajoute 1
+        vote[voteId]["vBlc"] = vote[voteId]["vBlc"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU VOTE BLANC
+        vote[voteId]["vBlc"].push(interaction.user.id) //ON AJOUTE DANS LE NON
+        vote[voteId]["total"] =  vote[voteId]["yes"].length + vote[voteId]["no"].length + vote[voteId]["vBlc"].length
+        if (vote[voteId]["max"] > 0 && vote[voteId]["total"] >= vote[voteId]["max"]) vote[voteId]["end"] = true;
 
-      }else if (buttonId === ("vEnd" + voteId)){ //Le bouton cliqué est VOTE BLANC
+      } else if (buttonId === ("vEnd" + voteId)) { //Le bouton cliqué est VOTE BLANC
 
+        if (vote[voteId]["end"]) {
+          interaction.reply("Ce vote semble etre déja terminé...")
+          return;
+        }
         createExcel(vote[voteId])
+        interaction.reply("Le vote est terminé, tu va recevoir le resultat...")
         setTimeout(() => {
           console.log("SENDING...")
           client.users.fetch(vote[voteId]["author"])
-          .then(u => {
-            u.send({files : ["./Sondage/Sondage " + vote[voteId]["question"] + ".xlsx"]})
-          }) 
+            .then(u => {
+              u.send({ files: ["./Sondage/Sondage " + vote[voteId]["question"] + ".xlsx"] })
+            })
         }, 5000)
-
-        return;
+        vote[voteId]["end"] = true;
 
       } else return;
 
@@ -158,20 +184,43 @@ client.on('interactionCreate', async interaction => {
             channel.messages.fetch(voteId)
               .then(message => {
                 if (message.embeds.length == 1 && message.embeds[0].fields.length == 1) {
-                  const resultat = getResultat(vote[voteId]["yes"].length, vote[voteId]["no"].length)
-                  const modif = message.embeds[0]
-                  modif.setFields([
+                  if (!vote[voteId]["end"]) { //LE VOTE NEST PAS TERMINER
+                    const resultat = getResultat(vote[voteId]["yes"].length, vote[voteId]["no"].length)
+                    const modif = message.embeds[0]
+                    modif.setFields([
                       {
                         "name": "Résultats :",
                         "value": resultat,
                         "inline": true
                       }
                     ]
-                  )
+                    )
 
-                  //MOFICATION DU MESSAGE
-                  message.edit({ embeds: [modif] })
-                  interaction.reply({ephemeral : true, content : "Ton vote a bien été pris en compte\nTu peux le modifier en cliquant de nouveau sur un choix"})
+                    //MOFICATION DU MESSAGE
+                    message.edit({ embeds: [modif] })
+                    interaction.reply({ ephemeral: true, content: "Ton vote a bien été pris en compte\nTu peux le modifier en cliquant de nouveau sur un choix" })
+                  } else { //LE VOTE EST TERMINER
+                    const resultat = getResultat(vote[voteId]["yes"].length, vote[voteId]["no"].length)
+                    var resultatFinal = "OUI"
+                    if (vote[voteId]["yes"].length < vote[voteId]["no"].length) var resultatFinal = "NON"
+                    const modif = message.embeds[0]
+                    modif.setFields([
+                      {
+                        "name": "Résultats :",
+                        "value": resultat,
+                        "inline": false
+                      }
+                    ],
+                    [
+                      {
+                        "name": "Ce vote est terminé",
+                        "value": "Le resultat final est " + resultatFinal,
+                        "inline": false
+                      }
+                    ])
+                    //MOFICATION DU MESSAGE
+                    message.edit({ embeds: [modif] })
+                  }
                 }
               })
 
@@ -193,7 +242,7 @@ function getResultat(positif, negatif) {
   return res + " (" + pourcentage + "%)"
 }
 
-function createExcel(stats){
+function createExcel(stats) {
 
   //INITIALISATION DU EXCEL
   var wb = new xl.Workbook();
@@ -210,31 +259,31 @@ function createExcel(stats){
   const colNON = 4
 
   ws.cell(2, colOUI)
-  .string("REPONSE POSITIVE")
-  .style(style)
-  .style({font: {size: 14}});
+    .string("REPONSE POSITIVE")
+    .style(style)
+    .style({ font: { size: 14 } });
 
   ws.cell(2, colNON)
-  .string("REPONSE NEGATIVE")
-  .style(style)
-  .style({font: {size: 14}});
+    .string("REPONSE NEGATIVE")
+    .style(style)
+    .style({ font: { size: 14 } });
 
-  for (var i = 0; i < stats["yes"].length; i++){
+  for (var i = 0; i < stats["yes"].length; i++) {
     client.users.fetch(stats["yes"][i])
-    .then (u => {
-      ws.cell(i+3, colOUI)
-      .string(u.username)
-      .style(style);
-    })    
+      .then(u => {
+        ws.cell(i + 3, colOUI)
+          .string(u.username)
+          .style(style);
+      })
   }
 
-  for (var i = 0; i < stats["no"].length; i++){
+  for (var i = 0; i < stats["no"].length; i++) {
     client.users.fetch(stats["no"][i])
-    .then (u => {
-      ws.cell(i+3, colNON)
-      .string(u.username)
-      .style(style);
-    })
+      .then(u => {
+        ws.cell(i + 3, colNON)
+          .string(u.username)
+          .style(style);
+      })
   }
 
   ws.column(colOUI).setWidth(50);
