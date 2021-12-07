@@ -88,13 +88,13 @@ client.on('interactionCreate', async interaction => {
                 .setStyle('DANGER'),
             );
 
+          //Changement du maxVote si ce dernier a été paramétré
           var maxVote = -1
           if (interaction.options.getInteger("maxvote") != undefined) maxVote = interaction.options.getInteger("maxvote")
-          console.log(maxVote)
 
           //CREATION DU JSON
           vote[msg.id] = {
-            "question": question,
+            "question": question.replace(/[^a-zA-Z ]/gi, ""),
             "author": interaction.user.id,
             "channel": msg.channel.id,
             "no": [],
@@ -129,8 +129,8 @@ client.on('interactionCreate', async interaction => {
         vote[voteId]["no"] = vote[voteId]["no"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU NON
         vote[voteId]["vBlc"] = vote[voteId]["vBlc"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU VOTE BLANC
         vote[voteId]["yes"].push(interaction.user.id) //ON AJOUTE DANS LE YES
-        vote[voteId]["total"] =  vote[voteId]["yes"].length + vote[voteId]["no"].length + vote[voteId]["vBlc"].length
-        if (vote[voteId]["max"] > 0 && vote[voteId]["total"] >= vote[voteId]["max"]) vote[voteId]["end"] = true;
+        vote[voteId]["total"] =  vote[voteId]["yes"].length + vote[voteId]["no"].length + vote[voteId]["vBlc"].length //Calcul du total
+        if (vote[voteId]["max"] > 0 && vote[voteId]["total"] >= vote[voteId]["max"]) vote[voteId]["end"] = true; //Si le max est atteint => STOP
 
       } else if (buttonId === ("nAns" + voteId)) { //Le bouton cliqué est NON
 
@@ -141,8 +141,8 @@ client.on('interactionCreate', async interaction => {
         vote[voteId]["no"] = vote[voteId]["no"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU NON
         vote[voteId]["vBlc"] = vote[voteId]["vBlc"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU VOTE BLANC
         vote[voteId]["no"].push(interaction.user.id) //ON AJOUTE DANS LE NON
-        vote[voteId]["total"] =  vote[voteId]["yes"].length + vote[voteId]["no"].length + vote[voteId]["vBlc"].length
-        if (vote[voteId]["max"] > 0 && vote[voteId]["total"] >= vote[voteId]["max"]) vote[voteId]["end"] = true;
+        vote[voteId]["total"] =  vote[voteId]["yes"].length + vote[voteId]["no"].length + vote[voteId]["vBlc"].length //Calcul du total
+        if (vote[voteId]["max"] > 0 && vote[voteId]["total"] >= vote[voteId]["max"]) vote[voteId]["end"] = true; //Si le max est atteint => STOP
 
       } else if (buttonId === ("vBlc" + voteId)) { //Le bouton cliqué est VOTE BLANC
 
@@ -153,24 +153,26 @@ client.on('interactionCreate', async interaction => {
         vote[voteId]["no"] = vote[voteId]["no"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU NON
         vote[voteId]["vBlc"] = vote[voteId]["vBlc"].filter(u => !(u === interaction.user.id)) //ON SUPPRIME DU VOTE BLANC
         vote[voteId]["vBlc"].push(interaction.user.id) //ON AJOUTE DANS LE NON
-        vote[voteId]["total"] =  vote[voteId]["yes"].length + vote[voteId]["no"].length + vote[voteId]["vBlc"].length
-        if (vote[voteId]["max"] > 0 && vote[voteId]["total"] >= vote[voteId]["max"]) vote[voteId]["end"] = true;
+        vote[voteId]["total"] =  vote[voteId]["yes"].length + vote[voteId]["no"].length + vote[voteId]["vBlc"].length //Calcul du total
+        if (vote[voteId]["max"] > 0 && vote[voteId]["total"] >= vote[voteId]["max"]) vote[voteId]["end"] = true; //Si le max est atteint => STOP
 
-      } else if (buttonId === ("vEnd" + voteId)) { //Le bouton cliqué est VOTE BLANC
+      } else if (buttonId === ("vEnd" + voteId)) { //Le bouton cliqué est FINIR LE VOTE
 
-        if (vote[voteId]["end"]) {
+        if (vote[voteId]["end"]) { //Si le vote est déja terminé
           interaction.reply("Ce vote semble etre déja terminé...")
           return;
         }
-        createExcel(vote[voteId])
-        interaction.reply("Le vote est terminé, tu va recevoir le resultat...")
+        createExcel(vote[voteId]) //On crée l'excel
+        interaction.reply("Le vote est terminé, tu va recevoir le resultat...") //On informe l'utilisateur
+        //ATTENTE ET ENVOI DU EXCEL
         setTimeout(() => {
           console.log("SENDING...")
           client.users.fetch(vote[voteId]["author"])
             .then(u => {
-              u.send({ files: ["./Sondage/Sondage " + vote[voteId]["question"] + ".xlsx"] })
+              u.send({ files: ["./Sondage/Sondage_" + vote[voteId]["question"].replace(/ /gi, '_') + ".xlsx"] })
             })
         }, 5000)
+
         vote[voteId]["end"] = true;
 
       } else return;
@@ -232,6 +234,7 @@ client.on('interactionCreate', async interaction => {
 
 })
 
+//CALCUL DU POURCENTAGE ET CREATION DE LA BARRE
 function getResultat(positif, negatif) {
 
   var res = ""
@@ -242,11 +245,13 @@ function getResultat(positif, negatif) {
   return res + " (" + pourcentage + "%)"
 }
 
+//CREATION DE L'EXCEL
 function createExcel(stats) {
 
   //INITIALISATION DU EXCEL
   var wb = new xl.Workbook();
   var ws = wb.addWorksheet('STATS SONDAGE');
+  const question = stats["question"].replace(/ /gi, '_');
   var style = wb.createStyle({
     font: {
       color: '#000000',
@@ -289,7 +294,7 @@ function createExcel(stats) {
   ws.column(colOUI).setWidth(50);
   ws.column(colNON).setWidth(50);
 
-  wb.write("./Sondage/Sondage " + stats["question"] + ".xlsx")
+  wb.write("./Sondage/Sondage_" + question + ".xlsx")
 }
 
 client.login(fs.readFileSync('token.txt', 'utf8'));
